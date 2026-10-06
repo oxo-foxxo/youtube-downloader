@@ -29,6 +29,7 @@ export class AppError extends Error {
     readonly retryable: boolean,
     readonly publicMessage = PUBLIC_MESSAGES[code],
     readonly provider?: string,
+    readonly correlationId?: string,
   ) {
     super(publicMessage);
     this.name = 'AppError';
@@ -56,4 +57,3 @@ export function classifyProviderError(failure: ProviderFailure): AppError {
 export function isRetryable(error: unknown): boolean {
   return error instanceof AppError && error.retryable;
 }
-
