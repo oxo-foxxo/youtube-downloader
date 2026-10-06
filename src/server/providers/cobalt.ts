@@ -51,7 +51,9 @@ export class CobaltAdapter implements SourceAdapter {
   private assertDownloadUrl(raw: string): void {
     const url = new URL(raw);
     const base = new URL(this.baseUrl);
-    if (url.protocol !== 'https:' || (url.hostname !== base.hostname && !url.hostname.endsWith('.googlevideo.com'))) {
+    const internalTunnel = url.protocol === base.protocol && url.host === base.host;
+    const googleVideo = url.protocol === 'https:' && url.hostname.endsWith('.googlevideo.com');
+    if (!internalTunnel && !googleVideo) {
       throw new AppError('PROVIDER_FAILURE', true, undefined, this.name);
     }
   }

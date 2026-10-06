@@ -10,7 +10,7 @@ const request: DownloadRequest = { videoId: 'dQw4w9WgXcQ', canonicalUrl: 'https:
 describe('CobaltAdapter', () => {
   it('requests exact H264 quality and writes a verified MP4', async () => {
     const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'tunnel', url: 'https://cobalt/video', filename: 'video.mp4' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'tunnel', url: 'http://cobalt:9000/video', filename: 'video.mp4' }), { status: 200 }))
       .mockResolvedValueOnce(new Response('video-bytes', { status: 200 }));
     const media = { probeMedia: vi.fn().mockResolvedValue({ video: { codec: 'h264', height: 1080 }, audio: { codec: 'aac' } }), remuxCopy: vi.fn() } as never;
     const output = join(tmpdir(), `cobalt-${crypto.randomUUID()}.mp4`);
@@ -24,7 +24,7 @@ describe('CobaltAdapter', () => {
 
   it('remuxes a verified H264 result to MOV', async () => {
     const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'redirect', url: 'https://cobalt/video' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'redirect', url: 'http://cobalt:9000/video' }), { status: 200 }))
       .mockResolvedValueOnce(new Response('bytes', { status: 200 }));
     const remuxCopy = vi.fn(async (_input: string, output: string) => writeFile(output, 'mov-bytes'));
     const media = {
