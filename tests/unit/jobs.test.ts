@@ -89,7 +89,7 @@ describe('DownloadQueue', () => {
     await eventually(() => expect(store.get(first.id)?.state).toBe('downloading'));
     expect(store.get(second.id)?.progress.queuePosition).toBe(1);
     expect(store.get(third.id)?.progress.queuePosition).toBe(2);
-    expect(calls).toEqual([request.videoId]);
+    await eventually(() => expect(calls).toEqual([request.videoId]));
 
     await eventually(() => expect(releases.length).toBeGreaterThan(0));
     releases.shift()?.();
