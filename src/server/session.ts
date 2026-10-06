@@ -7,6 +7,7 @@ interface Snapshot {
   connected: boolean;
   cookies?: string;
   userAgent?: string;
+  browserMode?: 'embedded' | 'external';
 }
 export interface SessionCredentials {
   cookiePath: string;
@@ -35,7 +36,10 @@ export class YouTubeSession {
   async status(): Promise<SessionStatus> {
     try {
       const result = await this.control('/status', 'GET');
-      return { state: this.expired ? 'expired' : result.connected ? 'connected' : 'disconnected' };
+      return {
+        state: this.expired ? 'expired' : result.connected ? 'connected' : 'disconnected',
+        ...(result.browserMode ? { browserMode: result.browserMode } : {}),
+      };
     } catch {
       return { state: 'unavailable' };
     }

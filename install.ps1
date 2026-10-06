@@ -2,6 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 $RepositoryUrl = 'https://github.com/oxo-foxxo/youtube-downloader.git'
 $ArchiveUrl = 'https://github.com/oxo-foxxo/youtube-downloader/archive/refs/heads/main.zip'
+$DockerX64Url = 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe'
+$DockerArm64Url = 'https://desktop.docker.com/win/main/arm64/Docker%20Desktop%20Installer.exe'
 $InstallDir = if ($Env:VIDEORIX_DIR) { $Env:VIDEORIX_DIR } else { Join-Path $HOME 'Videorix' }
 $ManagedMarker = Join-Path $InstallDir '.videorix-managed'
 $TempDir = $null
@@ -14,40 +16,101 @@ function Stop-Install([string]$Message) {
     throw "Videorix: $Message"
 }
 
+function New-TempDirectory {
+    if (-not $script:TempDir) {
+        $script:TempDir = Join-Path ([IO.Path]::GetTempPath()) ("videorix-" + [guid]::NewGuid())
+        New-Item -ItemType Directory -Path $script:TempDir -Force | Out-Null
+    }
+    return $script:TempDir
+}
+
+function Add-DockerToPath {
+    $Candidates = @(
+        (Join-Path $Env:LOCALAPPDATA 'Programs\Docker\Docker\resources\bin'),
+        (Join-Path $Env:LOCALAPPDATA 'Docker\resources\bin'),
+        (Join-Path $Env:ProgramFiles 'Docker\Docker\resources\bin')
+    )
+    foreach ($Candidate in $Candidates) {
+        if ((Test-Path $Candidate) -and (($Env:Path -split ';') -notcontains $Candidate)) {
+            $Env:Path = "$Candidate;$Env:Path"
+        }
+    }
+}
+
+function Get-DockerDesktopPath {
+    $Candidates = @(
+        (Join-Path $Env:LOCALAPPDATA 'Programs\Docker\Docker\Docker Desktop.exe'),
+        (Join-Path $Env:LOCALAPPDATA 'Docker\Docker Desktop.exe'),
+        (Join-Path $Env:ProgramFiles 'Docker\Docker\Docker Desktop.exe')
+    )
+    foreach ($Candidate in $Candidates) {
+        if (Test-Path $Candidate) { return $Candidate }
+    }
+    return $null
+}
+
 function Test-Docker {
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return $false }
     & docker info *> $null
     return $LASTEXITCODE -eq 0
+}
+
+function Install-DockerDesktop {
+    Write-Host "`nDocker Desktop не найден."
+    Write-Host 'Videorix может скачать подписанный установщик с desktop.docker.com.'
+    Write-Host 'Условия Docker вы примете самостоятельно при первом запуске приложения.'
+    Write-Host 'Лицензия: https://docs.docker.com/subscription-billing/desktop-license/'
+    $Answer = Read-Host 'Скачать и установить Docker Desktop? [y/N]'
+    if ($Answer -notmatch '^[YyДд]$') { Stop-Install 'Установка отменена.' }
+
+    $Architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+    $DownloadUrl = if ($Architecture -eq 'Arm64') { $DockerArm64Url } else { $DockerX64Url }
+    $Installer = Join-Path (New-TempDirectory) 'DockerDesktopInstaller.exe'
+    Write-Step 'Скачиваю Docker Desktop с desktop.docker.com'
+    Invoke-WebRequest -UseBasicParsing -Uri $DownloadUrl -OutFile $Installer
+
+    Write-Step 'Проверяю цифровую подпись Docker'
+    $Signature = Get-AuthenticodeSignature $Installer
+    if ($Signature.Status -ne 'Valid' -or $Signature.SignerCertificate.Subject -notmatch 'Docker') {
+        Stop-Install 'Цифровая подпись Docker Desktop недействительна.'
+    }
+
+    Write-Step 'Устанавливаю Docker Desktop для текущего пользователя'
+    $Process = Start-Process -FilePath $Installer -Wait -PassThru -ArgumentList @('install', '--user')
+    if ($Process.ExitCode -notin @(0, 3010)) {
+        Stop-Install "Установщик Docker завершился с кодом $($Process.ExitCode)."
+    }
+    Add-DockerToPath
+}
+
+function Start-DockerDesktop {
+    if (Test-Docker) { return }
+    $DockerDesktop = Get-DockerDesktopPath
+    if (-not $DockerDesktop) { Stop-Install 'Docker установлен, но Docker Desktop не найден.' }
+    Write-Step 'Запускаю Docker Desktop'
+    Start-Process $DockerDesktop
+    Write-Host 'Если Docker покажет соглашение, прочитайте и примите его в окне приложения.'
+    foreach ($Attempt in 1..300) {
+        Start-Sleep -Seconds 2
+        if (Test-Docker) { return }
+    }
+    Stop-Install 'Docker не запустился за 10 минут. Завершите настройку WSL 2 или перезагрузите Windows и повторите команду.'
 }
 
 if ($InstallDir -eq $HOME -or [string]::IsNullOrWhiteSpace($InstallDir)) {
     Stop-Install "Небезопасная папка установки: $InstallDir"
 }
+Add-DockerToPath
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { Install-DockerDesktop }
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    Stop-Install 'Сначала установите Docker Desktop: https://www.docker.com/products/docker-desktop/'
+    Stop-Install 'Docker установлен, но команда docker недоступна. Перезагрузите Windows и повторите команду.'
 }
-
 & docker compose version *> $null
-if ($LASTEXITCODE -ne 0) {
-    Stop-Install 'Docker Compose v2 недоступен. Обновите Docker Desktop.'
-}
-
-if (-not (Test-Docker)) {
-    $DockerDesktop = Join-Path $Env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'
-    if (Test-Path $DockerDesktop) {
-        Write-Step 'Запускаю Docker Desktop'
-        Start-Process $DockerDesktop
-        foreach ($Attempt in 1..60) {
-            Start-Sleep -Seconds 2
-            if (Test-Docker) { break }
-        }
-    }
-}
-if (-not (Test-Docker)) {
-    Stop-Install 'Docker Desktop не запущен. Запустите его и повторите команду.'
-}
+if ($LASTEXITCODE -ne 0) { Stop-Install 'Docker Compose v2 недоступен. Обновите Docker Desktop.' }
+Start-DockerDesktop
 
 function Install-FromArchive {
-    $script:TempDir = Join-Path ([IO.Path]::GetTempPath()) ("videorix-" + [guid]::NewGuid())
+    $script:TempDir = New-TempDirectory
     $Archive = Join-Path $script:TempDir 'videorix.zip'
     $Extracted = Join-Path $script:TempDir 'extracted'
     $Source = Join-Path $Extracted 'youtube-downloader-main'

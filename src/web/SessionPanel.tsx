@@ -26,13 +26,17 @@ export function SessionPanel({ api }: { api: NonNullable<ApiClient['session']> }
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [browserMode, setBrowserMode] = useState<SessionStatus['browserMode']>();
 
   useEffect(() => {
     let active = true;
     const refresh = async () => {
       try {
         const result = await api.status();
-        if (active) setState(result.state);
+        if (active) {
+          setState(result.state);
+          setBrowserMode(result.browserMode);
+        }
       } catch {
         if (active) setState('unavailable');
       }
@@ -72,6 +76,7 @@ export function SessionPanel({ api }: { api: NonNullable<ApiClient['session']> }
     action(async () => {
       const result = await api.confirm();
       setState(result.state);
+      setBrowserMode(result.browserMode);
       if (result.state === 'connected') setOpen(false);
       else setError('Вход пока не завершён. Завершите его в окне выше и нажмите «Я вошёл»');
     });
@@ -120,6 +125,7 @@ export function SessionPanel({ api }: { api: NonNullable<ApiClient['session']> }
           returnFocus={loginButton.current}
           busy={busy}
           error={error}
+          externalBrowser={browserMode === 'external'}
           onClose={() => setOpen(false)}
           onConfirm={() => void confirm()}
         />

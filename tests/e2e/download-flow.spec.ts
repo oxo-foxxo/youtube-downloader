@@ -104,6 +104,21 @@ test('opens the login dialog, returns focus on Escape, and confirms the session'
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
+test('explains the separate login window used by the desktop application', async ({ page }) => {
+  await page.route('**/api/session**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    await route.fulfill({
+      json: path.endsWith('/open')
+        ? { ready: true }
+        : { state: 'disconnected', browserMode: 'external' },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Войти в YouTube' }).click();
+  await expect(page.getByText('Окно YouTube открыто отдельно')).toBeVisible();
+  await expect(page.locator('.login-dialog iframe')).toHaveCount(0);
+});
+
 test('keeps the form and author signature usable on a narrow screen', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/');

@@ -10,6 +10,9 @@ export interface AppConfig {
   ytDlpPath: string;
   ffmpegPath: string;
   ffprobePath: string;
+  webRoot?: string;
+  ytDlpJsRuntime: string;
+  ytDlpPlainMode: boolean;
   sessionUrl?: string;
   sessionViewerUrl: string;
   sessionTokenPath: string;
@@ -31,6 +34,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     ytDlpPath: env.YT_DLP_PATH ?? 'yt-dlp',
     ffmpegPath: env.FFMPEG_PATH ?? 'ffmpeg',
     ffprobePath: env.FFPROBE_PATH ?? 'ffprobe',
+    ...(env.WEB_ROOT ? { webRoot: resolve(env.WEB_ROOT) } : {}),
+    ytDlpJsRuntime: env.YT_DLP_JS_RUNTIME ?? 'node',
+    ytDlpPlainMode: env.YT_DLP_PLAIN_MODE === '1',
     ...(env.SESSION_BROWSER_URL ? { sessionUrl: env.SESSION_BROWSER_URL } : {}),
     sessionViewerUrl: env.SESSION_VIEWER_URL ?? 'http://session-browser:6080',
     sessionTokenPath: env.SESSION_TOKEN_PATH ?? '/control/token',

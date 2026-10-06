@@ -37,6 +37,7 @@ export interface AppDependencies {
   sessionViewerUrl?: string;
   cancelAllJobs?: () => Promise<void>;
   disk?: DiskGuard;
+  webRoot?: string;
 }
 
 export interface InspectRouteDependencies {
@@ -69,7 +70,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   }
   if (dependencies.disk) app.get('/api/storage', () => dependencies.disk!.status());
   void app.register(rateLimit, { global: false });
-  const webRoot = resolve(process.cwd(), 'dist/web');
+  const webRoot = dependencies.webRoot ?? resolve(process.cwd(), 'dist/web');
   if (existsSync(webRoot)) void app.register(staticFiles, { root: webRoot, wildcard: false });
   registerInspectRoute(app, { orchestrator: dependencies.orchestrator, rateLimitMax });
   registerJobsRoutes(app, {

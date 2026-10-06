@@ -1,5 +1,6 @@
 export interface SessionStatus {
   state: 'connected' | 'disconnected' | 'expired' | 'unavailable';
+  browserMode?: 'embedded' | 'external';
 }
 
 export type Container = 'mp4' | 'mov';

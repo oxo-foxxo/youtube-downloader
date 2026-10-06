@@ -28,6 +28,8 @@ async function main(): Promise<void> {
     executable: config.ytDlpPath,
     bgutilBaseUrl: config.bgutilUrl,
     chromiumPath: config.chromiumPath,
+    jsRuntime: config.ytDlpJsRuntime,
+    plainMode: config.ytDlpPlainMode,
     media,
     ...(session ? { session } : {}),
   });
@@ -69,6 +71,7 @@ async function main(): Promise<void> {
           },
         }
       : {}),
+    ...(config.webRoot ? { webRoot: config.webRoot } : {}),
   });
   const expiryTimer = setInterval(() => {
     void expireReadyJobs(store, config.workRoot);

@@ -49,6 +49,8 @@ export interface YtDlpOptions {
   chromiumPath?: string;
   media?: MediaProcessor;
   session?: YouTubeSession;
+  jsRuntime?: string;
+  plainMode?: boolean;
 }
 
 export class YtDlpAdapter implements SourceAdapter {
@@ -58,6 +60,8 @@ export class YtDlpAdapter implements SourceAdapter {
   private readonly chromiumPath: string;
   private readonly media: MediaProcessor | undefined;
   private readonly session: YouTubeSession | undefined;
+  private readonly jsRuntime: string;
+  private readonly plainMode: boolean;
 
   constructor(
     private readonly run: ProcessRunner,
@@ -68,6 +72,8 @@ export class YtDlpAdapter implements SourceAdapter {
     this.chromiumPath = options.chromiumPath ?? '/usr/bin/chromium';
     this.media = options.media;
     this.session = options.session;
+    this.jsRuntime = options.jsRuntime ?? 'node';
+    this.plainMode = options.plainMode ?? false;
   }
 
   async inspect(canonicalUrl: string, signal: AbortSignal): Promise<VideoInfo> {
@@ -165,8 +171,9 @@ export class YtDlpAdapter implements SourceAdapter {
           this.executable,
           [
             '--no-config',
+            '--no-js-runtimes',
             '--js-runtimes',
-            'node',
+            this.jsRuntime,
             '--socket-timeout',
             '15',
             '--retries',
@@ -204,6 +211,7 @@ export class YtDlpAdapter implements SourceAdapter {
       message: primary.stderr,
       exitCode: primary.exitCode,
     });
+    if (this.plainMode) throw failure;
     if (failure.retryable) {
       const fallback = await this.run(this.executable, [...this.baseArgs('wpc'), ...args], options);
       if (fallback.exitCode === 0) return fallback;
@@ -217,6 +225,18 @@ export class YtDlpAdapter implements SourceAdapter {
   }
 
   private baseArgs(provider: 'bgutil' | 'wpc'): string[] {
+    if (this.plainMode) {
+      return [
+        '--no-config',
+        '--no-js-runtimes',
+        '--js-runtimes',
+        this.jsRuntime,
+        '--socket-timeout',
+        '15',
+        '--retries',
+        '1',
+      ];
+    }
     const extractorArgs =
       provider === 'bgutil'
         ? `youtubepot-bgutilhttp:base_url=${this.bgutilBaseUrl}`

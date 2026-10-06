@@ -88,6 +88,24 @@ describe('YtDlpAdapter', () => {
     ).rejects.toMatchObject({ code: 'LIVE_STREAM', retryable: false } satisfies Partial<AppError>);
   });
 
+  it('uses the bundled Node runtime without container token providers in desktop mode', async () => {
+    const run = vi.fn<ProcessRunner>().mockResolvedValue({
+      exitCode: 0,
+      stdout: JSON.stringify(metadata),
+      stderr: '',
+    });
+    const adapter = new YtDlpAdapter(run, {
+      plainMode: true,
+      jsRuntime: 'node:/Applications/Videorix.app/Contents/MacOS/Videorix',
+    });
+
+    await adapter.inspect!(metadata.webpage_url, new AbortController().signal);
+
+    const args = run.mock.calls[0]?.[1] ?? [];
+    expect(args).toContain('node:/Applications/Videorix.app/Contents/MacOS/Videorix');
+    expect(args.join(' ')).not.toMatch(/bgutil|wpc/);
+  });
+
   it('classifies extractor failures without exposing signed URLs', async () => {
     const run = vi.fn<ProcessRunner>().mockResolvedValue({
       exitCode: 1,

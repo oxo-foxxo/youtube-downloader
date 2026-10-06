@@ -1,8 +1,9 @@
 {
-  "name": "youtube-downloader",
+  "name": "videorix",
   "version": "0.1.0",
   "description": "Videorix — локальный загрузчик видео с YouTube в MP4 и MOV",
   "private": true,
+  "main": "dist/src/desktop/main.js",
   "author": "Шевелев Александр Максимович",
   "homepage": "https://github.com/oxo-foxxo/youtube-downloader#readme",
   "repository": {
@@ -26,6 +27,9 @@
     "test:integration": "vitest run tests/integration",
     "test:e2e": "vite build && playwright test",
     "smoke:youtube": "node scripts/smoke-youtube.mjs",
+    "desktop:prepare": "node scripts/prepare-desktop-resources.mjs",
+    "desktop:start": "pnpm run build && pnpm run desktop:prepare && electron .",
+    "desktop:dist": "pnpm run build && pnpm run desktop:prepare && electron-builder",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"*.{json,ts,html,yml}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"*.{json,ts,html,yml}\""
   },
@@ -46,6 +50,10 @@
     "@types/react": "^19.1.16",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.4",
+    "@ffprobe-installer/ffprobe": "2.1.2",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "ffmpeg-static": "5.3.0",
     "jsdom": "^27.0.0",
     "prettier": "^3.9.9",
     "tsx": "^4.20.5",
@@ -53,6 +61,46 @@
     "vite": "^7.1.7",
     "vitest": "^3.2.4",
     "yaml": "^2.8.1"
+  },
+  "build": {
+    "appId": "ru.alexshevelev.videorix",
+    "productName": "Videorix",
+    "copyright": "Copyright © 2026 Шевелев Александр Максимович",
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "extraResources": [
+      {
+        "from": "build/bin",
+        "to": "bin"
+      }
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.png",
+      "identity": "-",
+      "artifactName": "Videorix-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "artifactName": "Videorix-${version}-windows-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   },
   "packageManager": "pnpm@11.25.0"
 }

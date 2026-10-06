@@ -11,3 +11,5 @@ test-results/
 *.part
 .data/
 .videorix-managed
+build/bin/
+release/
