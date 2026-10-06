@@ -63,7 +63,7 @@ it('fails a job before downloading when space is low, cleans files, and continue
     expect(store.get(first.id)).toMatchObject({ state: 'failed', errorCode: 'DISK_FULL' }),
   );
   expect(executor.downloadVideo).not.toHaveBeenCalled();
-  await expect(access(join(root, first.id))).rejects.toThrow();
+  await vi.waitFor(async () => await expect(access(join(root, first.id))).rejects.toThrow());
   free = 10_000;
   const second = await queue.enqueue(request);
   await vi.waitFor(() => expect(store.get(second.id)?.state).toBe('ready'));
