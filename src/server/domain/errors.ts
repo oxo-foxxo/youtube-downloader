@@ -10,6 +10,10 @@ const PUBLIC_MESSAGES: Record<ProviderErrorCode, string> = {
   INVALID_URL: 'Проверьте ссылку на видео YouTube',
   VIDEO_UNAVAILABLE: 'Видео недоступно',
   LOGIN_REQUIRED: 'Видео недоступно без входа в аккаунт',
+  BOT_DETECTED:
+    'YouTube требует подтверждение входа. Нажмите «Войти в YouTube», завершите проверку и повторите загрузку',
+  AUTH_REQUIRED: 'Сессия YouTube истекла или требует проверки. Войдите в аккаунт снова',
+  QUEUE_FULL: 'В очереди уже 50 видео. Дождитесь завершения нескольких загрузок',
   AGE_RESTRICTED: 'Видео имеет возрастное ограничение и недоступно без входа',
   REGION_RESTRICTED: 'Видео недоступно в вашем регионе',
   LIVE_STREAM: 'Видео ещё транслируется',
@@ -39,18 +43,34 @@ export class AppError extends Error {
 export function classifyProviderError(failure: ProviderFailure): AppError {
   const message = failure.message;
   const lower = message.toLowerCase();
-  if (/age|confirm your age/.test(lower)) return new AppError('AGE_RESTRICTED', false, undefined, failure.provider);
-  if (/login_required|sign in/.test(lower)) return new AppError('LOGIN_REQUIRED', false, undefined, failure.provider);
-  if (/private|removed|unavailable/.test(lower)) return new AppError('VIDEO_UNAVAILABLE', false, undefined, failure.provider);
-  if (/country|region|geo/.test(lower)) return new AppError('REGION_RESTRICTED', false, undefined, failure.provider);
-  if (/live stream|is live|premiere/.test(lower)) return new AppError('LIVE_STREAM', false, undefined, failure.provider);
-  if (/format.*not available|requested format/.test(lower)) return new AppError('FORMAT_UNAVAILABLE', false, undefined, failure.provider);
-  if (/no space|disk full|enospc/.test(lower)) return new AppError('DISK_FULL', false, undefined, failure.provider);
-  if (/cancel|abort/.test(lower)) return new AppError('CANCELLED', false, undefined, failure.provider);
-  if (/429|too many requests|rate limit/.test(lower)) return new AppError('RATE_LIMITED', true, undefined, failure.provider);
-  if (/403|forbidden/.test(lower)) return new AppError('FORBIDDEN', true, undefined, failure.provider);
-  if (/expired/.test(lower)) return new AppError('EXPIRED_MEDIA_URL', true, undefined, failure.provider);
-  if (/not found|econnrefused|unreachable/.test(lower)) return new AppError('PROVIDER_UNAVAILABLE', true, undefined, failure.provider);
+  if (/not a bot|confirm you.?re human|unusual traffic/.test(lower))
+    return new AppError('BOT_DETECTED', true, undefined, failure.provider);
+  if (/age[- ]restrict|confirm your age|age verification/.test(lower))
+    return new AppError('AGE_RESTRICTED', false, undefined, failure.provider);
+  if (/country|region|geo[- ]restrict/.test(lower))
+    return new AppError('REGION_RESTRICTED', false, undefined, failure.provider);
+  if (/login_required|sign in/.test(lower))
+    return new AppError('LOGIN_REQUIRED', false, undefined, failure.provider);
+  if (
+    /private video|video is private|video.*(?:removed|unavailable)|video.*not available/.test(lower)
+  )
+    return new AppError('VIDEO_UNAVAILABLE', false, undefined, failure.provider);
+  if (/live stream|is live|premiere/.test(lower))
+    return new AppError('LIVE_STREAM', false, undefined, failure.provider);
+  if (/format.*not available|requested format/.test(lower))
+    return new AppError('FORMAT_UNAVAILABLE', false, undefined, failure.provider);
+  if (/no space|disk full|enospc/.test(lower))
+    return new AppError('DISK_FULL', false, undefined, failure.provider);
+  if (/cancel|abort/.test(lower))
+    return new AppError('CANCELLED', false, undefined, failure.provider);
+  if (/429|too many requests|rate limit/.test(lower))
+    return new AppError('RATE_LIMITED', true, undefined, failure.provider);
+  if (/403|forbidden/.test(lower))
+    return new AppError('FORBIDDEN', true, undefined, failure.provider);
+  if (/expired/.test(lower))
+    return new AppError('EXPIRED_MEDIA_URL', true, undefined, failure.provider);
+  if (/not found|econnrefused|unreachable/.test(lower))
+    return new AppError('PROVIDER_UNAVAILABLE', true, undefined, failure.provider);
   return new AppError('PROVIDER_FAILURE', true, undefined, failure.provider);
 }
 

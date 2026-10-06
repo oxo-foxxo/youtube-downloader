@@ -97,9 +97,7 @@ export function selectStreams(
 
     const embeddedAudioCodec = normalizeAudioCodec(video.audioCodec);
     const audio = separateAudio ?? null;
-    const audioCodec = audio
-      ? normalizeAudioCodec(audio.audioCodec)
-      : embeddedAudioCodec;
+    const audioCodec = audio ? normalizeAudioCodec(audio.audioCodec) : embeddedAudioCodec;
 
     if (!audio && (!video.hasAudio || !policy.audio.has(audioCodec))) {
       continue;
@@ -124,11 +122,13 @@ export function selectStreams(
 }
 
 export function buildDownloadOptions(streams: SourceStream[]): MediaVariant[] {
-  const heights = [...new Set(
-    streams
-      .filter((stream) => stream.hasVideo && stream.height !== undefined)
-      .map((stream) => stream.height as number),
-  )].sort((a, b) => b - a);
+  const heights = [
+    ...new Set(
+      streams
+        .filter((stream) => stream.hasVideo && stream.height !== undefined)
+        .map((stream) => stream.height as number),
+    ),
+  ].sort((a, b) => b - a);
 
   return heights.map((height) => {
     const selections = new Map<Container, SelectedStreams>();

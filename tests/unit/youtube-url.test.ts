@@ -42,4 +42,3 @@ describe('parseYouTubeUrl', () => {
     expect(() => parseYouTubeUrl(raw)).toThrow('Unsupported YouTube URL');
   });
 });
-

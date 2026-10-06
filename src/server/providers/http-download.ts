@@ -16,6 +16,8 @@ export async function writeResponseToFile(
       callback(bytes > maximumBytes ? new Error('Download exceeds size limit') : null, chunk);
     },
   });
-  await pipeline(Readable.fromWeb(response.body as never), limiter, createWriteStream(path), { signal });
+  await pipeline(Readable.fromWeb(response.body as never), limiter, createWriteStream(path), {
+    signal,
+  });
   return bytes;
 }

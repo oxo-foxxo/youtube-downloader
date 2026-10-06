@@ -1,10 +1,6 @@
 import { rename, rm } from 'node:fs/promises';
 
-import type {
-  Container,
-  ProcessRunner,
-  ProgressCallback,
-} from '../../shared/contracts.js';
+import type { Container, ProcessRunner, ProgressCallback } from '../../shared/contracts.js';
 import { isCodecCombinationCompatible } from '../domain/formats.js';
 
 export interface ProbeStream {
@@ -96,7 +92,17 @@ export class MediaProcessor {
     const partialPath = `${outputPath}.part`;
     const args = ['-y', '-i', videoPath];
     if (audioPath) args.push('-i', audioPath);
-    args.push('-map', '0:v:0', '-map', audioPath ? '1:a:0' : '0:a:0', '-c', 'copy', '-f', container, partialPath);
+    args.push(
+      '-map',
+      '0:v:0',
+      '-map',
+      audioPath ? '1:a:0' : '0:a:0',
+      '-c',
+      'copy',
+      '-f',
+      container,
+      partialPath,
+    );
     onProgress({ state: 'merging', message: 'Объединяем видео и звук' });
     await this.runFfmpeg(args, partialPath, outputPath, signal);
   }

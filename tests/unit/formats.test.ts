@@ -70,9 +70,7 @@ describe('selectStreams', () => {
   });
 
   it('does not substitute a lower resolution', () => {
-    expect(() => selectStreams(streams, 1440, 'mp4')).toThrow(
-      'Requested format is unavailable',
-    );
+    expect(() => selectStreams(streams, 1440, 'mp4')).toThrow('Requested format is unavailable');
   });
 
   it('accepts VP9 and Opus for MP4 but not MOV', () => {
@@ -97,9 +95,7 @@ describe('selectStreams', () => {
     ];
 
     expect(selectStreams(vp9, 2160, 'mp4').video.id).toBe('vp9');
-    expect(() => selectStreams(vp9, 2160, 'mov')).toThrow(
-      'Requested format is unavailable',
-    );
+    expect(() => selectStreams(vp9, 2160, 'mov')).toThrow('Requested format is unavailable');
   });
 });
 
@@ -147,4 +143,3 @@ describe('buildDownloadOptions', () => {
     ]);
   });
 });
-

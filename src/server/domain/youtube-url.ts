@@ -47,4 +47,3 @@ export function parseYouTubeUrl(raw: string): ParsedYouTubeUrl {
     canonicalUrl: `https://www.youtube.com/watch?v=${videoId}`,
   };
 }
-

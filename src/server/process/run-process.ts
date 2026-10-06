@@ -1,10 +1,6 @@
 import { spawn } from 'node:child_process';
 
-import type {
-  ProcessOptions,
-  ProcessResult,
-  ProcessRunner,
-} from '../../shared/contracts.js';
+import type { ProcessOptions, ProcessResult, ProcessRunner } from '../../shared/contracts.js';
 
 export type ProcessErrorCode = 'TIMEOUT' | 'CANCELLED' | 'FAILED';
 
@@ -58,6 +54,7 @@ export const runProcess: ProcessRunner = async (
   return await new Promise<ProcessResult>((resolve, reject) => {
     const child = spawn(command, [...args], {
       shell: false,
+      detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
       ...(options.cwd ? { cwd: options.cwd } : {}),
       ...(options.env ? { env: options.env } : {}),
@@ -67,13 +64,24 @@ export const runProcess: ProcessRunner = async (
     let stderr = '';
     let reason: ProcessErrorCode | null = null;
     let settled = false;
+    let forceKill: ReturnType<typeof setTimeout> | undefined;
     const stdoutLines = lineCollector(options.onStdoutLine);
     const stderrLines = lineCollector(options.onStderrLine);
 
     const terminate = (nextReason: ProcessErrorCode) => {
       if (reason) return;
       reason = nextReason;
-      child.kill('SIGTERM');
+      const kill = (signal: NodeJS.Signals) => {
+        try {
+          if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, signal);
+          else child.kill(signal);
+        } catch {
+          /* Already stopped. */
+        }
+      };
+      kill('SIGTERM');
+      forceKill = setTimeout(() => kill('SIGKILL'), 3000);
+      forceKill.unref();
     };
 
     const timeout = options.timeoutMs
@@ -81,6 +89,7 @@ export const runProcess: ProcessRunner = async (
       : undefined;
     const abort = () => terminate('CANCELLED');
     options.signal?.addEventListener('abort', abort, { once: true });
+    if (options.signal?.aborted) abort();
 
     child.stdout.on('data', (data: Buffer) => {
       const chunk = data.toString('utf8');
@@ -95,6 +104,7 @@ export const runProcess: ProcessRunner = async (
     child.once('error', (error) => {
       settled = true;
       if (timeout) clearTimeout(timeout);
+      if (forceKill) clearTimeout(forceKill);
       options.signal?.removeEventListener('abort', abort);
       reject(new ProcessExecutionError('FAILED', error.message));
     });
@@ -102,6 +112,7 @@ export const runProcess: ProcessRunner = async (
       if (settled) return;
       settled = true;
       if (timeout) clearTimeout(timeout);
+      if (forceKill) clearTimeout(forceKill);
       options.signal?.removeEventListener('abort', abort);
       stdoutLines.flush();
       stderrLines.flush();
@@ -118,4 +129,3 @@ export const runProcess: ProcessRunner = async (
     });
   });
 };
-

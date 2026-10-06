@@ -1,4 +1,6 @@
 import { rename, rm, stat } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import type { YouTubeSession } from '../session.js';
 
 import type {
   DownloadRequest,
@@ -46,6 +48,7 @@ export interface YtDlpOptions {
   bgutilBaseUrl?: string;
   chromiumPath?: string;
   media?: MediaProcessor;
+  session?: YouTubeSession;
 }
 
 export class YtDlpAdapter implements SourceAdapter {
@@ -54,6 +57,7 @@ export class YtDlpAdapter implements SourceAdapter {
   private readonly bgutilBaseUrl: string;
   private readonly chromiumPath: string;
   private readonly media: MediaProcessor | undefined;
+  private readonly session: YouTubeSession | undefined;
 
   constructor(
     private readonly run: ProcessRunner,
@@ -63,12 +67,13 @@ export class YtDlpAdapter implements SourceAdapter {
     this.bgutilBaseUrl = options.bgutilBaseUrl ?? 'http://bgutil:4416';
     this.chromiumPath = options.chromiumPath ?? '/usr/bin/chromium';
     this.media = options.media;
+    this.session = options.session;
   }
 
   async inspect(canonicalUrl: string, signal: AbortSignal): Promise<VideoInfo> {
     const result = await this.executeWithTokenFallback(
       ['--dump-single-json', '--no-playlist', '--no-warnings', canonicalUrl],
-      { signal, maxOutputBytes: 16 * 1024 * 1024 },
+      { signal, timeoutMs: 120_000, maxOutputBytes: 16 * 1024 * 1024 },
     );
     const metadata = JSON.parse(result.stdout) as YtDlpMetadata;
     if (metadata.is_live || metadata.live_status === 'is_live') {
@@ -95,9 +100,10 @@ export class YtDlpAdapter implements SourceAdapter {
     onProgress: ProgressCallback,
   ): Promise<DownloadResult> {
     const temporary = `${destination}.yt-dlp.mp4`;
-    const selector = request.container === 'mov'
-      ? `bestvideo[height=${request.height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[height=${request.height}][vcodec^=avc1]`
-      : `bestvideo[height=${request.height}][ext=mp4]+bestaudio[ext=m4a]/best[height=${request.height}][ext=mp4]`;
+    const selector =
+      request.container === 'mov'
+        ? `bestvideo[height=${request.height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[height=${request.height}][vcodec^=avc1]`
+        : `bestvideo[height=${request.height}][ext=mp4]+bestaudio[ext=m4a]/best[height=${request.height}][ext=mp4]`;
     const progress = (line: string) => {
       const match = line.match(/\[download\]\s+([\d.]+)%/);
       if (match?.[1]) {
@@ -107,7 +113,18 @@ export class YtDlpAdapter implements SourceAdapter {
 
     try {
       await this.executeWithTokenFallback(
-        ['-f', selector, '--no-playlist', '--merge-output-format', 'mp4', '-o', temporary, request.canonicalUrl],
+        [
+          '-f',
+          selector,
+          '--no-playlist',
+          '--paths',
+          `temp:${dirname(destination)}`,
+          '--merge-output-format',
+          'mp4',
+          '-o',
+          temporary,
+          request.canonicalUrl,
+        ],
         { signal, onStdoutLine: progress, onStderrLine: progress, maxOutputBytes: 1024 * 1024 },
       );
       if (request.container === 'mov') {
@@ -128,7 +145,9 @@ export class YtDlpAdapter implements SourceAdapter {
   async health(): Promise<HealthStatus> {
     try {
       const result = await this.run(this.executable, ['--version'], { timeoutMs: 5_000 });
-      return result.exitCode === 0 ? { healthy: true } : { healthy: false, detail: 'yt-dlp exited with an error' };
+      return result.exitCode === 0
+        ? { healthy: true }
+        : { healthy: false, detail: 'yt-dlp exited with an error' };
     } catch {
       return { healthy: false, detail: 'yt-dlp is unavailable' };
     }
@@ -138,21 +157,83 @@ export class YtDlpAdapter implements SourceAdapter {
     args: string[],
     options: ProcessOptions,
   ): Promise<ProcessResult> {
+    if (this.session) {
+      return this.session.use(options.signal, async (credentials, signal) => {
+        if (!credentials) return this.executeGuest(args, { ...options, signal });
+        // Let yt-dlp choose clients supporting account cookies. Do not force guest mweb clients.
+        const result = await this.run(
+          this.executable,
+          [
+            '--no-config',
+            '--js-runtimes',
+            'node',
+            '--socket-timeout',
+            '15',
+            '--retries',
+            '1',
+            '--cookies',
+            credentials.cookiePath,
+            '--user-agent',
+            credentials.userAgent,
+            '--extractor-args',
+            `youtubepot-bgutilhttp:base_url=${this.bgutilBaseUrl}`,
+            ...args,
+          ],
+          { ...options, signal },
+        );
+        if (result.exitCode === 0) return result;
+        const failure = classifyProviderError({ provider: this.name, message: result.stderr });
+        if (
+          ['LOGIN_REQUIRED', 'BOT_DETECTED'].includes(failure.code) ||
+          /cookies.*(?:expired|invalid|rotated)/i.test(result.stderr)
+        ) {
+          this.session?.markExpired();
+          throw new AppError('AUTH_REQUIRED', false, undefined, this.name);
+        }
+        throw failure;
+      });
+    }
+    return this.executeGuest(args, options);
+  }
+
+  private async executeGuest(args: string[], options: ProcessOptions): Promise<ProcessResult> {
     const primary = await this.run(this.executable, [...this.baseArgs('bgutil'), ...args], options);
     if (primary.exitCode === 0) return primary;
-    if (/po token.*(?:bgutil|provider).*fail/i.test(primary.stderr)) {
+    const failure = classifyProviderError({
+      provider: this.name,
+      message: primary.stderr,
+      exitCode: primary.exitCode,
+    });
+    if (failure.retryable) {
       const fallback = await this.run(this.executable, [...this.baseArgs('wpc'), ...args], options);
       if (fallback.exitCode === 0) return fallback;
-      throw classifyProviderError({ provider: this.name, message: fallback.stderr, exitCode: fallback.exitCode });
+      throw classifyProviderError({
+        provider: this.name,
+        message: fallback.stderr,
+        exitCode: fallback.exitCode,
+      });
     }
-    throw classifyProviderError({ provider: this.name, message: primary.stderr, exitCode: primary.exitCode });
+    throw failure;
   }
 
   private baseArgs(provider: 'bgutil' | 'wpc'): string[] {
-    const extractorArgs = provider === 'bgutil'
-      ? `youtubepot-bgutilhttp:base_url=${this.bgutilBaseUrl}`
-      : `youtubepot-wpc:browser_path=${this.chromiumPath}`;
-    return ['--no-config', '--js-runtimes', 'node', '--extractor-args', extractorArgs];
+    const extractorArgs =
+      provider === 'bgutil'
+        ? `youtubepot-bgutilhttp:base_url=${this.bgutilBaseUrl}`
+        : `youtubepot-wpc:browser_path=${this.chromiumPath}`;
+    return [
+      '--no-config',
+      '--js-runtimes',
+      'node',
+      '--socket-timeout',
+      '15',
+      '--retries',
+      '1',
+      '--extractor-args',
+      'youtube:player_client=mweb;fetch_pot=always',
+      '--extractor-args',
+      extractorArgs,
+    ];
   }
 }
 

@@ -6,7 +6,13 @@ import { buildApp } from '../../src/server/app.js';
 import { AppError } from '../../src/server/domain/errors.js';
 import { DownloadQueue } from '../../src/server/jobs/queue.js';
 import { JobStore } from '../../src/server/jobs/store.js';
-import type { DownloadRequest, DownloadResult, ProgressCallback, SourceAdapter, VideoInfo } from '../../src/shared/contracts.js';
+import type {
+  DownloadRequest,
+  DownloadResult,
+  ProgressCallback,
+  SourceAdapter,
+  VideoInfo,
+} from '../../src/shared/contracts.js';
 
 const workRoot = await mkdtemp(join(tmpdir(), 'youtube-downloader-e2e-'));
 const store = new JobStore();
@@ -29,7 +35,11 @@ function fixtureInfo(canonicalUrl: string, staleMov = false): VideoInfo {
         audioCodec: 'aac',
         containers: [
           { container: 'mp4', available: true },
-          { container: 'mov', available: !staleMov, ...(staleMov ? { reason: 'Формат исчез' } : {}) },
+          {
+            container: 'mov',
+            available: !staleMov,
+            ...(staleMov ? { reason: 'Формат исчез' } : {}),
+          },
         ],
       },
       {
@@ -39,7 +49,10 @@ function fixtureInfo(canonicalUrl: string, staleMov = false): VideoInfo {
         hdr: false,
         videoCodec: 'h264',
         audioCodec: 'aac',
-        containers: [{ container: 'mp4', available: true }, { container: 'mov', available: true }],
+        containers: [
+          { container: 'mp4', available: true },
+          { container: 'mov', available: true },
+        ],
       },
     ],
   };
@@ -48,7 +61,8 @@ function fixtureInfo(canonicalUrl: string, staleMov = false): VideoInfo {
 const executor = {
   async inspectVideo(canonicalUrl: string): Promise<VideoInfo> {
     const videoId = new URL(canonicalUrl).searchParams.get('v') as string;
-    if (videoId === 'bbbbbbbbbbb') throw new AppError('PROVIDER_FAILURE', true, undefined, 'fake', 'e2e-correlation');
+    if (videoId === 'bbbbbbbbbbb')
+      throw new AppError('PROVIDER_FAILURE', true, undefined, 'fake', 'e2e-correlation');
     const count = (inspectionCounts.get(videoId) ?? 0) + 1;
     inspectionCounts.set(videoId, count);
     return fixtureInfo(canonicalUrl, videoId === 'aaaaaaaaaaa' && count > 1);
@@ -76,7 +90,13 @@ const healthAdapter = {
   download: executor.downloadVideo,
   health: async () => ({ healthy: true }),
 } as SourceAdapter;
-const app = buildApp({ store, queue, orchestrator: executor, adapters: [healthAdapter], rateLimitMax: 1_000 });
+const app = buildApp({
+  store,
+  queue,
+  orchestrator: executor,
+  adapters: [healthAdapter],
+  rateLimitMax: 1_000,
+});
 
 let closing = false;
 async function close(): Promise<void> {
@@ -87,16 +107,24 @@ async function close(): Promise<void> {
   await rm(workRoot, { recursive: true, force: true });
 }
 
-process.once('SIGINT', () => { void close(); });
-process.once('SIGTERM', () => { void close(); });
+process.once('SIGINT', () => {
+  void close();
+});
+process.once('SIGTERM', () => {
+  void close();
+});
 await app.listen({ host: '127.0.0.1', port: 4173 });
 
 function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(resolve, milliseconds);
-    signal.addEventListener('abort', () => {
-      clearTimeout(timer);
-      reject(new AppError('CANCELLED', false));
-    }, { once: true });
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(new AppError('CANCELLED', false));
+      },
+      { once: true },
+    );
   });
 }

@@ -1,3 +1,7 @@
+export interface SessionStatus {
+  state: 'connected' | 'disconnected' | 'expired' | 'unavailable';
+}
+
 export type Container = 'mp4' | 'mov';
 
 export interface ParsedYouTubeUrl {
@@ -32,6 +36,8 @@ export interface VideoInfo {
 }
 
 export interface DownloadRequest {
+  estimatedSizeBytes?: number;
+  title?: string;
   videoId: string;
   canonicalUrl: string;
   height: number;
@@ -39,13 +45,7 @@ export interface DownloadRequest {
 }
 
 export type JobState =
-  | 'queued'
-  | 'downloading'
-  | 'merging'
-  | 'ready'
-  | 'failed'
-  | 'cancelled'
-  | 'expired';
+  'queued' | 'downloading' | 'merging' | 'ready' | 'failed' | 'cancelled' | 'expired';
 
 export interface ProgressEvent {
   state: JobState;
@@ -73,6 +73,9 @@ export type ProviderErrorCode =
   | 'INVALID_URL'
   | 'VIDEO_UNAVAILABLE'
   | 'LOGIN_REQUIRED'
+  | 'BOT_DETECTED'
+  | 'AUTH_REQUIRED'
+  | 'QUEUE_FULL'
   | 'AGE_RESTRICTED'
   | 'REGION_RESTRICTED'
   | 'LIVE_STREAM'

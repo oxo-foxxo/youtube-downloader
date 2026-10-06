@@ -1,6 +1,13 @@
+import { isTerminalJob } from '../../shared/job-state.js';
 import { randomUUID } from 'node:crypto';
 
-import type { DownloadRequest, Job, JobState, ProgressEvent, ProviderErrorCode } from '../../shared/contracts.js';
+import type {
+  DownloadRequest,
+  Job,
+  JobState,
+  ProgressEvent,
+  ProviderErrorCode,
+} from '../../shared/contracts.js';
 
 export interface StoredJob extends Job {
   filePath?: string;
@@ -22,9 +29,9 @@ export interface FileLease {
 }
 
 const TRANSITIONS: Record<JobState, ReadonlySet<JobState>> = {
-  queued: new Set(['downloading', 'cancelled']),
+  queued: new Set(['downloading', 'cancelled', 'failed']),
   downloading: new Set(['merging', 'ready', 'failed', 'cancelled']),
-  merging: new Set(['ready', 'failed', 'cancelled']),
+  merging: new Set(['downloading', 'ready', 'failed', 'cancelled']),
   ready: new Set(['expired']),
   failed: new Set(),
   cancelled: new Set(),
@@ -38,6 +45,11 @@ export class JobStore {
   private expiredFileCleanup?: (job: StoredJob) => Promise<void>;
 
   create(request: DownloadRequest): StoredJob {
+    const finished = this.list().filter(
+      (job) => isTerminalJob(job.state) && this.getLeaseCount(job.id) === 0,
+    );
+    for (const old of finished.slice(0, Math.max(0, finished.length - 99)))
+      this.jobs.delete(old.id);
     const now = new Date().toISOString();
     const job: StoredJob = {
       id: randomUUID(),
@@ -56,6 +68,16 @@ export class JobStore {
     return job ? structuredClone(job) : undefined;
   }
 
+  restore(job: StoredJob): void {
+    this.jobs.set(job.id, structuredClone(job));
+  }
+
+  remove(id: string): boolean {
+    if (this.getLeaseCount(id) > 0) return false;
+    this.listeners.delete(id);
+    return this.jobs.delete(id);
+  }
+
   list(): StoredJob[] {
     return [...this.jobs.values()].map((job) => structuredClone(job));
   }
@@ -72,9 +94,11 @@ export class JobStore {
       ...update,
       state: nextState,
       updatedAt: new Date().toISOString(),
-      progress: update.progress ?? (nextState === current.state
-        ? current.progress
-        : { state: nextState, message: stateMessage(nextState) }),
+      progress:
+        update.progress ??
+        (nextState === current.state
+          ? current.progress
+          : { state: nextState, message: stateMessage(nextState) }),
     };
     this.jobs.set(id, next);
     this.publish(next);

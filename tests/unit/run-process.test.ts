@@ -5,7 +5,11 @@ import { ProcessExecutionError, runProcess } from '../../src/server/process/run-
 describe('runProcess', () => {
   it('passes shell metacharacters as a literal argument', async () => {
     const literal = '$(touch /tmp/never) `whoami`; echo unsafe';
-    const result = await runProcess(process.execPath, ['-e', 'console.log(process.argv[1])', literal]);
+    const result = await runProcess(process.execPath, [
+      '-e',
+      'console.log(process.argv[1])',
+      literal,
+    ]);
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toBe(literal);

@@ -37,27 +37,30 @@ describe('MediaProcessor', () => {
     expect(result.audio).toMatchObject({ codec: 'aac' });
   });
 
-  it.each(['mp4', 'mov'] as const)('muxes streams into %s using stream copy and atomic rename', async (container) => {
-    const directory = await mkdtemp(join(tmpdir(), 'youtube-downloader-'));
-    const output = join(directory, `output.${container}`);
-    const runner = fakeRunner();
-    const media = new MediaProcessor(runner);
+  it.each(['mp4', 'mov'] as const)(
+    'muxes streams into %s using stream copy and atomic rename',
+    async (container) => {
+      const directory = await mkdtemp(join(tmpdir(), 'youtube-downloader-'));
+      const output = join(directory, `output.${container}`);
+      const runner = fakeRunner();
+      const media = new MediaProcessor(runner);
 
-    await media.muxCopy(
-      '/tmp/video.mp4',
-      '/tmp/audio.m4a',
-      output,
-      container,
-      new AbortController().signal,
-      vi.fn(),
-    );
+      await media.muxCopy(
+        '/tmp/video.mp4',
+        '/tmp/audio.m4a',
+        output,
+        container,
+        new AbortController().signal,
+        vi.fn(),
+      );
 
-    expect(await readFile(output, 'utf8')).toBe('muxed');
-    const ffmpegCall = runner.mock.calls.find(([command]) => command === 'ffmpeg');
-    expect(ffmpegCall?.[1]).toContain('-c');
-    expect(ffmpegCall?.[1]).toContain('copy');
-    expect(ffmpegCall?.[1].at(-1)).toBe(`${output}.part`);
-  });
+      expect(await readFile(output, 'utf8')).toBe('muxed');
+      const ffmpegCall = runner.mock.calls.find(([command]) => command === 'ffmpeg');
+      expect(ffmpegCall?.[1]).toContain('-c');
+      expect(ffmpegCall?.[1]).toContain('copy');
+      expect(ffmpegCall?.[1].at(-1)).toBe(`${output}.part`);
+    },
+  );
 
   it('rejects an incompatible MOV stream before invoking ffmpeg', async () => {
     const runner = fakeRunner(
@@ -72,14 +75,8 @@ describe('MediaProcessor', () => {
     const media = new MediaProcessor(runner);
 
     await expect(
-      media.remuxCopy(
-        '/tmp/source.webm',
-        '/tmp/output.mov',
-        'mov',
-        new AbortController().signal,
-      ),
+      media.remuxCopy('/tmp/source.webm', '/tmp/output.mov', 'mov', new AbortController().signal),
     ).rejects.toThrow('Requested format is unavailable');
     expect(runner.mock.calls.some(([command]) => command === 'ffmpeg')).toBe(false);
   });
 });
-

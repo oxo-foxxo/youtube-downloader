@@ -41,6 +41,11 @@ describe('classifyProviderError', () => {
     ['This video is private', 'VIDEO_UNAVAILABLE', false],
     ['This video is not available in your country', 'REGION_RESTRICTED', false],
     ['LOGIN_REQUIRED', 'LOGIN_REQUIRED', false],
+    ['Sign in to confirm you’re not a bot', 'BOT_DETECTED', true],
+    ['LOGIN_REQUIRED: Sign in to confirm you are not a bot', 'BOT_DETECTED', true],
+    ['Unable to download webpage: HTTP Error 403', 'FORBIDDEN', true],
+    ['Provider unavailable', 'PROVIDER_FAILURE', true],
+    ['This video is unavailable in your country', 'REGION_RESTRICTED', false],
   ] as const)('maps %s', (message, code, retryable) => {
     const error = classifyProviderError({ provider: 'yt-dlp', message });
     expect(error).toMatchObject({ code, retryable });
@@ -95,17 +100,20 @@ describe('YtDlpAdapter', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN', retryable: true } satisfies Partial<AppError>);
   });
 
-  it('retries token-provider failure once with the WPC guest provider', async () => {
-    const run = vi
-      .fn<ProcessRunner>()
-      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'PO Token provider bgutil failed' })
-      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(metadata), stderr: '' });
-    const adapter = new YtDlpAdapter(run);
+  it.each(['PO Token provider bgutil failed', 'Sign in to confirm you’re not a bot'])(
+    'retries %s once with the WPC guest provider',
+    async (stderr) => {
+      const run = vi
+        .fn<ProcessRunner>()
+        .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr })
+        .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(metadata), stderr: '' });
+      const adapter = new YtDlpAdapter(run);
 
-    await adapter.inspect!(metadata.webpage_url, new AbortController().signal);
+      await adapter.inspect!(metadata.webpage_url, new AbortController().signal);
 
-    expect(run).toHaveBeenCalledTimes(2);
-    expect(run.mock.calls[0]?.[1].join(' ')).toContain('bgutil');
-    expect(run.mock.calls[1]?.[1].join(' ')).toContain('wpc');
-  });
+      expect(run).toHaveBeenCalledTimes(2);
+      expect(run.mock.calls[0]?.[1].join(' ')).toContain('bgutil');
+      expect(run.mock.calls[1]?.[1].join(' ')).toContain('wpc');
+    },
+  );
 });

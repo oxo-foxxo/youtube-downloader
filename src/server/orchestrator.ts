@@ -37,7 +37,10 @@ export class DownloadOrchestrator {
       this.throwIfCancelled(signal, correlationId);
       try {
         const result = await adapter.inspect(canonicalUrl, signal);
-        this.options.logger.info({ correlationId, provider: adapter.name, operation: 'inspect' }, 'Provider succeeded');
+        this.options.logger.info(
+          { correlationId, provider: adapter.name, operation: 'inspect' },
+          'Provider succeeded',
+        );
         return result;
       } catch (error) {
         const failure = this.normalizeError(error, adapter.name, correlationId);
@@ -47,7 +50,9 @@ export class DownloadOrchestrator {
       }
     }
 
-    throw lastError ?? new AppError('PROVIDER_UNAVAILABLE', true, undefined, undefined, correlationId);
+    throw (
+      lastError ?? new AppError('PROVIDER_UNAVAILABLE', true, undefined, undefined, correlationId)
+    );
   }
 
   async downloadVideo(
@@ -68,7 +73,10 @@ export class DownloadOrchestrator {
           throw new AppError('PROVIDER_FAILURE', true, undefined, adapter.name);
         }
         await this.verifyExactOutput(request, destination, signal, adapter.name);
-        this.options.logger.info({ correlationId, provider: adapter.name, operation: 'download' }, 'Provider succeeded');
+        this.options.logger.info(
+          { correlationId, provider: adapter.name, operation: 'download' },
+          'Provider succeeded',
+        );
         return result;
       } catch (error) {
         await cleanupAttemptFiles(destination);
@@ -79,7 +87,9 @@ export class DownloadOrchestrator {
       }
     }
 
-    throw lastError ?? new AppError('PROVIDER_UNAVAILABLE', true, undefined, undefined, correlationId);
+    throw (
+      lastError ?? new AppError('PROVIDER_UNAVAILABLE', true, undefined, undefined, correlationId)
+    );
   }
 
   private async verifyExactOutput(
@@ -102,10 +112,20 @@ export class DownloadOrchestrator {
   }
 
   private normalizeError(error: unknown, provider: string, correlationId: string): AppError {
-    const failure = error instanceof AppError
-      ? error
-      : classifyProviderError({ provider, message: error instanceof Error ? error.message : String(error) });
-    return new AppError(failure.code, failure.retryable, failure.publicMessage, failure.provider ?? provider, correlationId);
+    const failure =
+      error instanceof AppError
+        ? error
+        : classifyProviderError({
+            provider,
+            message: error instanceof Error ? error.message : String(error),
+          });
+    return new AppError(
+      failure.code,
+      failure.retryable,
+      failure.publicMessage,
+      failure.provider ?? provider,
+      correlationId,
+    );
   }
 
   private throwIfCancelled(signal: AbortSignal, correlationId: string): void {
@@ -113,13 +133,16 @@ export class DownloadOrchestrator {
   }
 
   private logFailure(error: AppError, correlationId: string, operation: string): void {
-    this.options.logger.warn({
-      correlationId,
-      provider: error.provider,
-      operation,
-      errorCode: error.code,
-      retryable: error.retryable,
-    }, 'Provider failed');
+    this.options.logger.warn(
+      {
+        correlationId,
+        provider: error.provider,
+        operation,
+        errorCode: error.code,
+        retryable: error.retryable,
+      },
+      'Provider failed',
+    );
   }
 }
 
@@ -132,7 +155,9 @@ async function cleanupAttemptFiles(destination: string): Promise<void> {
   } catch {
     return;
   }
-  await Promise.all(entries
-    .filter((entry) => entry === prefix || entry.startsWith(`${prefix}.`))
-    .map((entry) => rm(resolve(directory, entry), { recursive: true, force: true })));
+  await Promise.all(
+    entries
+      .filter((entry) => entry === prefix || entry.startsWith(`${prefix}.`))
+      .map((entry) => rm(resolve(directory, entry), { recursive: true, force: true })),
+  );
 }

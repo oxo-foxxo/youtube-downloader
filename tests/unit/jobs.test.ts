@@ -7,11 +7,21 @@ import { DownloadQueue } from '../../src/server/jobs/queue.js';
 import { JobStore } from '../../src/server/jobs/store.js';
 import type { DownloadRequest } from '../../src/shared/contracts.js';
 
-const request: DownloadRequest = { videoId: 'dQw4w9WgXcQ', canonicalUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', height: 1080, container: 'mp4' };
+const request: DownloadRequest = {
+  videoId: 'dQw4w9WgXcQ',
+  canonicalUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  height: 1080,
+  container: 'mp4',
+};
 
 async function eventually(assertion: () => void): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    try { assertion(); return; } catch { await new Promise((resolve) => setTimeout(resolve, 2)); }
+    try {
+      assertion();
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
   }
   assertion();
 }
@@ -23,9 +33,15 @@ describe('JobStore', () => {
     const listener = vi.fn();
     const unsubscribe = store.subscribe(job.id, listener);
 
-    store.update(job.id, { state: 'downloading', progress: { state: 'downloading', message: 'Загрузка', downloadedBytes: 10 } });
+    store.update(job.id, {
+      state: 'downloading',
+      progress: { state: 'downloading', message: 'Загрузка', downloadedBytes: 10 },
+    });
 
-    expect(store.get(job.id)).toMatchObject({ state: 'downloading', progress: { downloadedBytes: 10 } });
+    expect(store.get(job.id)).toMatchObject({
+      state: 'downloading',
+      progress: { downloadedBytes: 10 },
+    });
     expect(store.get(job.id)?.progress).not.toHaveProperty('percent');
     expect(listener).toHaveBeenCalled();
     expect(() => store.update(job.id, { state: 'queued' })).toThrow(/transition/i);
@@ -56,12 +72,14 @@ describe('DownloadQueue', () => {
     const store = new JobStore();
     const releases: Array<() => void> = [];
     const calls: string[] = [];
-    const executor = { downloadVideo: vi.fn(async (jobRequest: DownloadRequest, destination: string) => {
-      calls.push(jobRequest.videoId);
-      await new Promise<void>((resolve) => releases.push(resolve));
-      await writeFile(destination, 'file');
-      return { provider: 'test', filePath: destination, sizeBytes: 4 };
-    }) };
+    const executor = {
+      downloadVideo: vi.fn(async (jobRequest: DownloadRequest, destination: string) => {
+        calls.push(jobRequest.videoId);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        await writeFile(destination, 'file');
+        return { provider: 'test', filePath: destination, sizeBytes: 4 };
+      }),
+    };
     const queue = new DownloadQueue({ store, executor, workRoot });
     queue.start();
 
@@ -89,10 +107,16 @@ describe('DownloadQueue', () => {
   it('cancels queued and active jobs', async () => {
     const workRoot = await mkdtemp(join(tmpdir(), 'queue-cancel-'));
     const store = new JobStore();
-    const executor = { downloadVideo: vi.fn(async (_request: DownloadRequest, _destination: string, signal: AbortSignal) => {
-      await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
-      throw new Error('unreachable');
-    }) };
+    const executor = {
+      downloadVideo: vi.fn(
+        async (_request: DownloadRequest, _destination: string, signal: AbortSignal) => {
+          await new Promise<void>((_resolve, reject) =>
+            signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }),
+          );
+          throw new Error('unreachable');
+        },
+      ),
+    };
     const queue = new DownloadQueue({ store, executor, workRoot });
     queue.start();
     const active = await queue.enqueue(request);
@@ -109,17 +133,26 @@ describe('DownloadQueue', () => {
   it('finishes stop after aborting an active download', async () => {
     const workRoot = await mkdtemp(join(tmpdir(), 'queue-stop-'));
     const store = new JobStore();
-    const executor = { downloadVideo: vi.fn(async (_request: DownloadRequest, _destination: string, signal: AbortSignal) => {
-      await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
-      throw new Error('unreachable');
-    }) };
+    const executor = {
+      downloadVideo: vi.fn(
+        async (_request: DownloadRequest, _destination: string, signal: AbortSignal) => {
+          await new Promise<void>((_resolve, reject) =>
+            signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }),
+          );
+          throw new Error('unreachable');
+        },
+      ),
+    };
     const queue = new DownloadQueue({ store, executor, workRoot });
     queue.start();
     const active = await queue.enqueue(request);
     await eventually(() => expect(store.get(active.id)?.state).toBe('downloading'));
 
     const stopped = queue.stop().then(() => true);
-    const completed = await Promise.race([stopped, new Promise<false>((resolve) => setTimeout(() => resolve(false), 100))]);
+    const completed = await Promise.race([
+      stopped,
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 100)),
+    ]);
 
     expect(completed).toBe(true);
     expect(store.get(active.id)?.state).toBe('cancelled');

@@ -9,15 +9,15 @@ COPY index.html tsconfig.json vite.config.ts vitest.config.ts ./
 COPY src ./src
 RUN pnpm run build && pnpm prune --prod
 
-FROM node:22.20.0-bookworm-slim AS runtime
+FROM node:22.20.0-bookworm-slim AS runtime-base
 
 ENV NODE_ENV=production \
     HOME=/work/home \
     WORK_ROOT=/work/jobs \
-    CHROMIUM_PATH=/usr/bin/chromium
+    CHROMIUM_PATH=/app/scripts/chromium-guest.sh
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates chromium ffmpeg python3 python3-pip tini \
+    && apt-get install -y --no-install-recommends ca-certificates chromium ffmpeg python3 python3-pip tini xvfb xauth \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.lock /tmp/requirements.lock
@@ -30,11 +30,27 @@ RUN groupadd --gid 10001 app \
     && chown -R app:app /app /work
 
 WORKDIR /app
+
+FROM runtime-base AS runtime
 COPY --from=build --chown=app:app /app/package.json ./package.json
 COPY --from=build --chown=app:app /app/node_modules ./node_modules
 COPY --from=build --chown=app:app /app/dist ./dist
+COPY --chmod=755 scripts/chromium-guest.sh ./scripts/chromium-guest.sh
 
 USER 10001:10001
 EXPOSE 8080
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "dist/src/server/index.js"]
+CMD ["xvfb-run", "-a", "node", "dist/src/server/index.js"]
+
+FROM runtime-base AS session-browser
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends novnc websockify x11vnc openbox x11-utils \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /session /control \
+    && chown app:app /session /control \
+    && chmod 700 /session /control
+COPY --chmod=755 scripts/start-session-browser.sh /app/scripts/start-session-browser.sh
+COPY scripts/session-browser.py /app/scripts/session-browser.py
+USER 10001:10001
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/app/scripts/start-session-browser.sh"]

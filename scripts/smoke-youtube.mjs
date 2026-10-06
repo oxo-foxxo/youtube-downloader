@@ -3,7 +3,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
+import { probeWithDocker } from './lib/probe-media.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const baseUrl = (process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:8080').replace(/\/$/, '');
@@ -12,18 +12,28 @@ let jobId;
 
 try {
   const health = await getJson(`${baseUrl}/health`);
-  if (health.status !== 'ok' && health.status !== 'degraded') throw new Error('Сервис не готов к smoke-проверке');
+  if (health.status !== 'ok' && health.status !== 'degraded')
+    throw new Error('Сервис не готов к smoke-проверке');
 
   const info = await postJson(`${baseUrl}/api/inspect`, { url: args.url });
   const variant = info.variants?.find((item) => item.height === args.height);
   const option = variant?.containers?.find((item) => item.container === args.container);
-  if (!option?.available) throw new Error(`У видео нет доступного варианта ${args.height}p ${args.container.toUpperCase()}`);
+  if (!option?.available)
+    throw new Error(
+      `У видео нет доступного варианта ${args.height}p ${args.container.toUpperCase()}`,
+    );
 
-  const job = await postJson(`${baseUrl}/api/jobs`, { url: args.url, height: args.height, container: args.container });
+  const job = await postJson(`${baseUrl}/api/jobs`, {
+    url: args.url,
+    height: args.height,
+    container: args.container,
+  });
   jobId = job.id;
   const ready = await waitForJob(baseUrl, job.id, 15 * 60_000);
   if (ready.state !== 'ready') {
-    throw new Error(`Задача завершилась со статусом ${ready.state}${ready.errorCode ? ` (${ready.errorCode})` : ''}`);
+    throw new Error(
+      `Задача завершилась со статусом ${ready.state}${ready.errorCode ? ` (${ready.errorCode})` : ''}`,
+    );
   }
 
   const response = await fetch(`${baseUrl}/api/jobs/${encodeURIComponent(job.id)}/file`);
@@ -36,13 +46,18 @@ try {
   const probe = await probeWithDocker(bytes);
   const video = probe.streams?.find((stream) => stream.codec_type === 'video');
   const audio = probe.streams?.find((stream) => stream.codec_type === 'audio');
-  if (!video || video.height !== args.height) throw new Error(`FFprobe не подтвердил видеодорожку ${args.height}p`);
+  if (!video || video.height !== args.height)
+    throw new Error(`FFprobe не подтвердил видеодорожку ${args.height}p`);
   if (!audio) throw new Error('FFprobe не обнаружил аудиодорожку');
 
-  console.log(`OK: ${info.title} — ${args.height}p ${args.container.toUpperCase()}, ${bytes.length} байт`);
+  console.log(
+    `OK: ${info.title} — ${args.height}p ${args.container.toUpperCase()}, ${bytes.length} байт`,
+  );
 } finally {
   if (jobId) {
-    await fetch(`${baseUrl}/api/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' }).catch(() => undefined);
+    await fetch(`${baseUrl}/api/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' }).catch(
+      () => undefined,
+    );
   }
   await rm(tempRoot, { recursive: true, force: true });
 }
@@ -59,8 +74,16 @@ function parseArgs(values) {
   const [url] = positional;
   const height = Number(valueAfter(values, '--height'));
   const container = valueAfter(values, '--container');
-  if (positional.length !== 1 || !url || !Number.isInteger(height) || height <= 0 || !['mp4', 'mov'].includes(container)) {
-    throw new Error('Использование: pnpm run smoke:youtube -- <public-url> --height <number> --container <mp4|mov>');
+  if (
+    positional.length !== 1 ||
+    !url ||
+    !Number.isInteger(height) ||
+    height <= 0 ||
+    !['mp4', 'mov'].includes(container)
+  ) {
+    throw new Error(
+      'Использование: pnpm run smoke:youtube -- <public-url> --height <number> --container <mp4|mov>',
+    );
   }
   return { url, height, container };
 }
@@ -98,24 +121,4 @@ async function waitForJob(base, id, timeoutMs) {
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
   throw new Error('Smoke-загрузка не завершилась за 15 минут');
-}
-
-function probeWithDocker(bytes) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('docker', [
-      'compose', 'exec', '-T', 'app', 'ffprobe',
-      '-v', 'error', '-show_streams', '-of', 'json', 'pipe:0',
-    ], { stdio: ['pipe', 'pipe', 'pipe'] });
-    const stdout = [];
-    const stderr = [];
-    child.stdout.on('data', (chunk) => stdout.push(chunk));
-    child.stderr.on('data', (chunk) => stderr.push(chunk));
-    child.once('error', reject);
-    child.once('close', (code) => {
-      if (code !== 0) return reject(new Error(`FFprobe завершился с кодом ${code}: ${Buffer.concat(stderr).toString('utf8').trim()}`));
-      try { resolve(JSON.parse(Buffer.concat(stdout).toString('utf8'))); }
-      catch { reject(new Error('FFprobe вернул некорректный JSON')); }
-    });
-    child.stdin.end(bytes);
-  });
 }
