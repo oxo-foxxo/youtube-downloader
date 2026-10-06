@@ -73,11 +73,15 @@ describe('DownloadQueue', () => {
     expect(store.get(third.id)?.progress.queuePosition).toBe(2);
     expect(calls).toEqual([request.videoId]);
 
+    await eventually(() => expect(releases.length).toBeGreaterThan(0));
     releases.shift()?.();
     await eventually(() => expect(store.get(second.id)?.state).toBe('downloading'));
+    await eventually(() => expect(calls).toHaveLength(2));
     expect(calls).toEqual([request.videoId, 'aaaaaaaaaaa']);
+    await eventually(() => expect(releases.length).toBeGreaterThan(0));
     releases.shift()?.();
     await eventually(() => expect(store.get(third.id)?.state).toBe('downloading'));
+    await eventually(() => expect(releases.length).toBeGreaterThan(0));
     releases.shift()?.();
     await eventually(() => expect(store.get(third.id)?.state).toBe('ready'));
   });

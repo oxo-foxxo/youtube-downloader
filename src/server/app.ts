@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import rateLimit from '@fastify/rate-limit';
+import staticFiles from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import type { SourceAdapter, VideoInfo } from '../shared/contracts.js';
@@ -43,6 +46,8 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: dependencies.bodyLimit ?? 16 * 1024 });
   const rateLimitMax = dependencies.rateLimitMax ?? 30;
   void app.register(rateLimit, { global: false });
+  const webRoot = resolve(process.cwd(), 'dist/web');
+  if (existsSync(webRoot)) void app.register(staticFiles, { root: webRoot, wildcard: false });
   registerInspectRoute(app, { orchestrator: dependencies.orchestrator, rateLimitMax });
   registerJobsRoutes(app, { store: dependencies.store, queue: dependencies.queue, orchestrator: dependencies.orchestrator, rateLimitMax });
   registerHealthRoute(app, dependencies.adapters);
