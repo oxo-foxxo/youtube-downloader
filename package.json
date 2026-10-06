@@ -1,6 +1,6 @@
 {
   "name": "videorix",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Videorix — локальный загрузчик видео с YouTube в MP4 и MOV",
   "private": true,
   "main": "dist/src/desktop/main.js",
