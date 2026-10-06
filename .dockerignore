@@ -4,6 +4,7 @@
 .superpowers
 .data
 .env
+.videorix-managed
 coverage
 dist
 node_modules

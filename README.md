@@ -27,29 +27,29 @@ Videorix — локальный кроссплатформенный веб-се
 
 Для Windows используйте Docker Desktop с Linux-контейнерами и WSL 2. Конфигурация Compose не содержит путей, завязанных на macOS; текущая версия полностью проверена на macOS, а Windows-сборка требует дополнительной ручной smoke-проверки. Node.js, Python и FFmpeg устанавливать на компьютер отдельно не требуется — они находятся внутри контейнеров.
 
-## Быстрый запуск
+## Установка одной командой
+
+Перед установкой запустите Docker Desktop. Git, Node.js, Python и FFmpeg не требуются.
 
 ### macOS
 
 Откройте Terminal и выполните:
 
 ```bash
-git clone https://github.com/oxo-foxxo/youtube-downloader.git
-cd youtube-downloader
-docker compose up -d --build
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/oxo-foxxo/youtube-downloader/main/install.sh)"
 ```
 
 ### Windows
 
-Откройте PowerShell и выполните те же команды:
+Откройте PowerShell и выполните:
 
 ```powershell
-git clone https://github.com/oxo-foxxo/youtube-downloader.git
-cd youtube-downloader
-docker compose up -d --build
+irm https://raw.githubusercontent.com/oxo-foxxo/youtube-downloader/main/install.ps1 | iex
 ```
 
-Первый запуск может занять несколько минут: Docker скачает базовые образы и соберёт приложение. Когда контейнеры будут готовы, откройте:
+Установщик скачает проект в `~/Videorix`, запустит Docker Desktop при необходимости, соберёт контейнеры, дождётся готовности и сам откроет приложение. Первый запуск может занять несколько минут. Повтор той же команды обновляет Videorix и снова запускает его, сохраняя настройки, вход в YouTube и готовые файлы в Docker-томах.
+
+Когда установка закончится, приложение будет доступно по адресу:
 
 **http://localhost:8080**
 
@@ -69,6 +69,16 @@ curl http://localhost:8080/health
 
 ```powershell
 Invoke-RestMethod http://localhost:8080/health
+```
+
+### Ручная установка через Git
+
+Если вы хотите изменять исходный код:
+
+```bash
+git clone https://github.com/oxo-foxxo/youtube-downloader.git
+cd youtube-downloader
+docker compose up -d --build
 ```
 
 ## Как скачать видео
@@ -118,6 +128,8 @@ docker compose down -v
 ```
 
 ## Обновление
+
+При установке одной командой просто повторите ту же команду из раздела установки. Для Git-клона:
 
 ```bash
 git pull

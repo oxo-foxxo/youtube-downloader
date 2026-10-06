@@ -10,3 +10,4 @@ test-results/
 *.log
 *.part
 .data/
+.videorix-managed

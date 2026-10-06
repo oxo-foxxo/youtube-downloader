@@ -32,6 +32,24 @@ jobs:
       - name: Check formatting
         run: pnpm run format:check
 
+      - name: Validate macOS installer
+        run: bash -n install.sh
+
+      - name: Validate Windows installer
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'install.ps1'),
+            [ref] $tokens,
+            [ref] $errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+
       - name: Check types
         run: pnpm run typecheck
 
