@@ -21,6 +21,7 @@ export class DownloadQueue {
   private active: { id: string; controller: AbortController } | undefined;
   private running = false;
   private pumping = false;
+  private readonly idleWaiters = new Set<() => void>();
   private readonly retentionMs: number;
 
   constructor(private readonly options: DownloadQueueOptions) {
@@ -40,9 +41,11 @@ export class DownloadQueue {
       await rm(join(this.options.workRoot, id), { recursive: true, force: true });
     }
     this.updateQueuePositions();
+    if (this.active) await new Promise<void>((resolve) => this.idleWaiters.add(resolve));
   }
 
   async enqueue(request: DownloadRequest): Promise<StoredJob> {
+    if (!this.running) throw new AppError('PROVIDER_UNAVAILABLE', true);
     const job = this.options.store.create(request);
     const directory = join(this.options.workRoot, job.id);
     await mkdir(directory, { recursive: true });
@@ -68,6 +71,10 @@ export class DownloadQueue {
     }
     const job = this.options.store.get(id);
     if (!job) throw new Error(`Unknown job: ${id}`);
+    if (job.state === 'ready') {
+      this.options.store.update(id, { state: 'expired' });
+      if (this.options.store.getLeaseCount(id) === 0) await rm(join(this.options.workRoot, id), { recursive: true, force: true });
+    }
   }
 
   private async pump(): Promise<void> {
@@ -81,6 +88,8 @@ export class DownloadQueue {
     if (!job) {
       this.active = undefined;
       this.pumping = false;
+      for (const resolveIdle of this.idleWaiters) resolveIdle();
+      this.idleWaiters.clear();
       void this.pump();
       return;
     }

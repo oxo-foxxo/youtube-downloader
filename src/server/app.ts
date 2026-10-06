@@ -1,0 +1,66 @@
+import { randomUUID } from 'node:crypto';
+
+import rateLimit from '@fastify/rate-limit';
+import Fastify, { type FastifyInstance } from 'fastify';
+
+import type { SourceAdapter, VideoInfo } from '../shared/contracts.js';
+import { AppError } from './domain/errors.js';
+import type { DownloadQueue } from './jobs/queue.js';
+import type { JobStore, StoredJob } from './jobs/store.js';
+import { registerHealthRoute } from './routes/health.js';
+import { registerInspectRoute } from './routes/inspect.js';
+import { registerJobsRoutes } from './routes/jobs.js';
+
+export interface InspectService {
+  inspectVideo(canonicalUrl: string, signal: AbortSignal): Promise<VideoInfo>;
+}
+
+export interface QueueService {
+  enqueue(request: Parameters<DownloadQueue['enqueue']>[0]): Promise<StoredJob>;
+  cancel(id: string): Promise<void>;
+}
+
+export interface AppDependencies {
+  store: JobStore;
+  queue: QueueService;
+  orchestrator: InspectService;
+  adapters: SourceAdapter[];
+  bodyLimit?: number;
+  rateLimitMax?: number;
+}
+
+export interface InspectRouteDependencies {
+  orchestrator: InspectService;
+  rateLimitMax: number;
+}
+
+export interface JobsRouteDependencies extends InspectRouteDependencies {
+  store: JobStore;
+  queue: QueueService;
+}
+
+export function buildApp(dependencies: AppDependencies): FastifyInstance {
+  const app = Fastify({ logger: false, bodyLimit: dependencies.bodyLimit ?? 16 * 1024 });
+  const rateLimitMax = dependencies.rateLimitMax ?? 30;
+  void app.register(rateLimit, { global: false });
+  registerInspectRoute(app, { orchestrator: dependencies.orchestrator, rateLimitMax });
+  registerJobsRoutes(app, { store: dependencies.store, queue: dependencies.queue, orchestrator: dependencies.orchestrator, rateLimitMax });
+  registerHealthRoute(app, dependencies.adapters);
+
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof AppError) {
+      const status = error.code === 'INVALID_URL' ? 400
+        : error.code === 'FORMAT_UNAVAILABLE' ? 409
+          : error.retryable ? 503 : 422;
+      return reply.code(status).send({ error: { code: error.code, message: error.publicMessage, correlationId: error.correlationId ?? randomUUID() } });
+    }
+    if (error instanceof TypeError && error.message === 'Unsupported YouTube URL') {
+      const invalid = new AppError('INVALID_URL', false);
+      return reply.code(400).send({ error: { code: invalid.code, message: invalid.publicMessage, correlationId: randomUUID() } });
+    }
+    const statusCode = error && typeof error === 'object' && 'statusCode' in error && typeof error.statusCode === 'number' ? error.statusCode : 500;
+    return reply.code(statusCode).send({ error: { code: statusCode === 413 ? 'PAYLOAD_TOO_LARGE' : 'BAD_REQUEST', message: statusCode === 413 ? 'Запрос слишком большой' : 'Некорректный запрос', correlationId: randomUUID() } });
+  });
+
+  return app;
+}
