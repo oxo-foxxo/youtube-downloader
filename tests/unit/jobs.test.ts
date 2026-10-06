@@ -105,4 +105,23 @@ describe('DownloadQueue', () => {
     await eventually(() => expect(store.get(active.id)?.state).toBe('cancelled'));
     expect(store.get(queued.id)?.state).toBe('cancelled');
   });
+
+  it('finishes stop after aborting an active download', async () => {
+    const workRoot = await mkdtemp(join(tmpdir(), 'queue-stop-'));
+    const store = new JobStore();
+    const executor = { downloadVideo: vi.fn(async (_request: DownloadRequest, _destination: string, signal: AbortSignal) => {
+      await new Promise<void>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+      throw new Error('unreachable');
+    }) };
+    const queue = new DownloadQueue({ store, executor, workRoot });
+    queue.start();
+    const active = await queue.enqueue(request);
+    await eventually(() => expect(store.get(active.id)?.state).toBe('downloading'));
+
+    const stopped = queue.stop().then(() => true);
+    const completed = await Promise.race([stopped, new Promise<false>((resolve) => setTimeout(() => resolve(false), 100))]);
+
+    expect(completed).toBe(true);
+    expect(store.get(active.id)?.state).toBe('cancelled');
+  });
 });

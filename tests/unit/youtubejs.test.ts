@@ -7,8 +7,8 @@ import { YouTubeJsAdapter } from '../../src/server/providers/youtubejs.js';
 const info = {
   basicInfo: { id: 'dQw4w9WgXcQ', title: 'Video', duration: 42, thumbnailUrl: 'https://img', isLive: false },
   streams: [
-    { id: 'v', hasVideo: true, hasAudio: false, height: 1080, width: 1920, fps: 30, hdr: false, videoCodec: 'h264', bitrate: 4_000_000, url: 'https://media/video' },
-    { id: 'a', hasVideo: false, hasAudio: true, hdr: false, audioCodec: 'aac', bitrate: 128_000, url: 'https://media/audio' },
+    { id: 'v', hasVideo: true, hasAudio: false, height: 1080, width: 1920, fps: 30, hdr: false, videoCodec: 'h264', bitrate: 4_000_000, url: 'https://rr1.googlevideo.com/video' },
+    { id: 'a', hasVideo: false, hasAudio: true, hdr: false, audioCodec: 'aac', bitrate: 128_000, url: 'https://rr1.googlevideo.com/audio' },
   ],
 };
 
@@ -40,5 +40,21 @@ describe('YouTubeJsAdapter', () => {
     await adapter.download({ videoId: 'dQw4w9WgXcQ', canonicalUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', height: 1080, container: 'mp4' }, output, new AbortController().signal, vi.fn());
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(muxCopy).toHaveBeenCalledWith(expect.any(String), expect.any(String), output, 'mp4', expect.any(AbortSignal), expect.any(Function));
+  });
+
+  it('does not follow a media redirect to an untrusted host', async () => {
+    const client = { getInfo: vi.fn().mockResolvedValue(info) };
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => init?.redirect === 'manual'
+      ? new Response(null, { status: 302, headers: { location: 'http://127.0.0.1/private' } })
+      : new Response('private-data'));
+    const adapter = new YouTubeJsAdapter(async () => client as never, fetcher, {} as never);
+
+    await expect(adapter.download(
+      { videoId: 'dQw4w9WgXcQ', canonicalUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', height: 1080, container: 'mp4' },
+      join(tmpdir(), `youtubejs-${crypto.randomUUID()}.mp4`),
+      new AbortController().signal,
+      vi.fn(),
+    )).rejects.toMatchObject({ code: 'PROVIDER_FAILURE' });
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 });

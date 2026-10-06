@@ -3,6 +3,7 @@ import type { DownloadRequest, DownloadResult, HealthStatus, ProgressCallback, S
 import { AppError, classifyProviderError } from '../domain/errors.js';
 import type { MediaProcessor } from '../media/ffmpeg.js';
 import { writeResponseToFile } from './http-download.js';
+import { fetchAllowedMedia, isGoogleVideoUrl } from './media-fetch.js';
 
 interface CobaltResponse { status: string; url?: string; filename?: string; error?: { code?: string } }
 
@@ -24,9 +25,16 @@ export class CobaltAdapter implements SourceAdapter {
       if (!['redirect', 'tunnel'].includes(payload.status) || !payload.url) {
         throw new AppError('PROVIDER_FAILURE', true, undefined, this.name);
       }
-      this.assertDownloadUrl(payload.url);
       onProgress({ state: 'downloading', message: 'Скачиваем видео' });
-      await writeResponseToFile(await this.fetcher(payload.url, { signal }), temporary, signal);
+      const base = new URL(this.baseUrl);
+      const mediaResponse = await fetchAllowedMedia(
+        this.fetcher,
+        payload.url,
+        signal,
+        (url) => (!url.username && !url.password && url.origin === base.origin) || isGoogleVideoUrl(url),
+        this.name,
+      );
+      await writeResponseToFile(mediaResponse, temporary, signal);
       const probe = await this.media.probeMedia(temporary, signal);
       if (probe.video?.height !== request.height || probe.video.codec !== 'h264' || probe.audio?.codec !== 'aac') {
         throw new AppError('PROVIDER_FAILURE', true, undefined, this.name);
@@ -46,15 +54,5 @@ export class CobaltAdapter implements SourceAdapter {
   async health(): Promise<HealthStatus> {
     try { const response = await this.fetcher(`${this.baseUrl}/`); return { healthy: response.ok }; }
     catch { return { healthy: false, detail: 'Cobalt is unavailable' }; }
-  }
-
-  private assertDownloadUrl(raw: string): void {
-    const url = new URL(raw);
-    const base = new URL(this.baseUrl);
-    const internalTunnel = url.protocol === base.protocol && url.host === base.host;
-    const googleVideo = url.protocol === 'https:' && url.hostname.endsWith('.googlevideo.com');
-    if (!internalTunnel && !googleVideo) {
-      throw new AppError('PROVIDER_FAILURE', true, undefined, this.name);
-    }
   }
 }

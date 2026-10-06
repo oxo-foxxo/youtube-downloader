@@ -40,8 +40,8 @@ async function main(): Promise<void> {
     if (closing) return;
     closing = true;
     clearInterval(expiryTimer);
-    await app.close();
     await queue.stop();
+    await app.close();
   };
   process.once('SIGINT', () => { void shutdown(); });
   process.once('SIGTERM', () => { void shutdown(); });

@@ -99,6 +99,7 @@ export class DownloadQueue {
     try {
       this.options.store.update(id, { state: 'downloading' });
       await this.writeManifest(id);
+      if (controller.signal.aborted) throw new AppError('CANCELLED', false);
       await this.options.executor.downloadVideo(job.request, destination, controller.signal, (progress) => {
         const state = progress.state === 'merging' ? 'merging' : 'downloading';
         this.options.store.update(id, { state, progress });
@@ -121,6 +122,8 @@ export class DownloadQueue {
     } finally {
       this.active = undefined;
       this.pumping = false;
+      for (const resolveIdle of this.idleWaiters) resolveIdle();
+      this.idleWaiters.clear();
       void this.pump();
     }
   }

@@ -4,6 +4,7 @@ import { buildDownloadOptions, selectStreams, type SourceStream } from '../domai
 import { AppError, classifyProviderError } from '../domain/errors.js';
 import type { MediaProcessor } from '../media/ffmpeg.js';
 import { writeResponseToFile } from './http-download.js';
+import { fetchAllowedMedia, isGoogleVideoUrl } from './media-fetch.js';
 
 export interface YouTubeJsInfo { basicInfo: { id: string; title: string; duration: number; thumbnailUrl?: string; isLive: boolean }; streams: SourceStream[] }
 export interface YouTubeJsClient { getInfo(url: string): Promise<YouTubeJsInfo> }
@@ -34,8 +35,10 @@ export class YouTubeJsAdapter implements SourceAdapter {
       const selected = selectStreams(info.streams, request.height, request.container);
       if (!selected.video.url || (selected.audio && !selected.audio.url)) throw new AppError('PROVIDER_FAILURE', true, undefined, this.name);
       onProgress({ state: 'downloading', message: 'Скачиваем видео' });
-      await writeResponseToFile(await this.fetcher(selected.video.url, { signal }), videoPath, signal);
-      if (selected.audio?.url) await writeResponseToFile(await this.fetcher(selected.audio.url, { signal }), audioPath, signal);
+      await writeResponseToFile(await fetchAllowedMedia(this.fetcher, selected.video.url, signal, isGoogleVideoUrl, this.name), videoPath, signal);
+      if (selected.audio?.url) {
+        await writeResponseToFile(await fetchAllowedMedia(this.fetcher, selected.audio.url, signal, isGoogleVideoUrl, this.name), audioPath, signal);
+      }
       await this.media.muxCopy(videoPath, selected.audio ? audioPath : null, destination, request.container, signal, onProgress);
       const file = await stat(destination);
       return { provider: this.name, filePath: destination, sizeBytes: file.size };

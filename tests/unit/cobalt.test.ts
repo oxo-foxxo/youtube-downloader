@@ -44,4 +44,18 @@ describe('CobaltAdapter', () => {
     const adapter = new CobaltAdapter('http://cobalt:9000', fetcher, {} as never);
     await expect(adapter.download(request, '/tmp/output.mp4', new AbortController().signal, vi.fn())).rejects.toMatchObject({ retryable: true });
   });
+
+  it('does not follow a media redirect to an untrusted host', async () => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'tunnel', url: 'http://cobalt:9000/video' }), { status: 200 }))
+      .mockImplementationOnce(async (_url, init) => init?.redirect === 'manual'
+        ? new Response(null, { status: 302, headers: { location: 'http://127.0.0.1/private' } })
+        : new Response('private-data', { status: 200 }));
+    const media = { probeMedia: vi.fn().mockResolvedValue({ video: { codec: 'h264', height: 1080 }, audio: { codec: 'aac' } }) } as never;
+    const adapter = new CobaltAdapter('http://cobalt:9000', fetcher, media);
+
+    await expect(adapter.download(request, join(tmpdir(), `cobalt-${crypto.randomUUID()}.mp4`), new AbortController().signal, vi.fn()))
+      .rejects.toMatchObject({ code: 'PROVIDER_FAILURE' });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
 });
